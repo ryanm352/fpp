@@ -38,7 +38,8 @@
 #include "SequenceFile.h"
 
 SequenceFile::SequenceFile(char *seqData)
-  : m_file(NULL),
+  : m_writeMode(0),
+	m_file(NULL),
 	m_filePosition(0),
 	m_chanDataOffset(0),
 	m_fixedHeaderSize(0),
