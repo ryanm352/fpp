@@ -1,150 +1,137 @@
 <?php
 
-if ( !isset($_GET['nopage']) ):
+filter_var($_GET['plugin'], FILTER_SANITIZE_STRING);
+filter_var($_GET['page'], FILTER_SANITIZE_STRING);
+filter_var($_GET['file'], FILTER_SANITIZE_STRING);
+filter_var($_GET['nopage'], FILTER_SANITIZE_NUMBER_INT);
+
+define('PAGE', filter_var($_GET['page'], FILTER_SANITIZE_STRING));
+
+if (!empty($_GET['plugin']) && isset($_GET['plugin'])) {
+    define('PLUGIN', $_GET['plugin']);
+    $pluginConfigFile = $settings['configDirectory'] . "/plugin." . PLUGIN;
+    if (file_exists($pluginConfigFile)) {
+        $pluginSettings = parse_ini_file($pluginConfigFile);
+    }
+}
+
+
+$isPage = $_GET['nopage'] !== 1;
+
+if (!$isPage) {
+    $skipJSsettings = 1;
+} else {
+    // isPAge.. check for all vars and show errors
+    define('PAGE', $_GET['page']);
+    if (!empty($_GET['file']) && isset($_GET['file'])) {
+        define('FILE', $_GET['file']);
+    }
+}
 
 require_once("config.php");
+
+// user requesting file
+if (!$isPage && defined('FILE')) {
+    $file = $pluginDirectory . "/" . PLUGIN . "/" . FILE;
+
+    if (file_exists($file)) {
+        $path_parts = pathinfo($file);
+        $file_extension = $path_parts['extension'];
+
+        switch ($file_extension) {
+            case "gif":
+                $ctype = "image/gif;";
+                break;
+            case "png":
+                $ctype = "image/png;";
+                break;
+            case "jpeg":
+            case "jpg":
+                $ctype = "image/jpg;";
+                break;
+            case "js":
+                $ctype = "text/javascript;";
+                break;
+            case "jsonp":
+                $ctype = "application/jsonp;";
+                break;
+            case "json":
+                $ctype = "application/json;";
+                break;
+            case "svg":
+                $ctype = "image/svg+xml;";
+                break;
+            case "css":
+                $ctype = "text/css;";
+                break;
+            default:
+                $ctype = "text/plain;";
+                break;
+        }
+
+        header('Content-type: ' . $ctype);
+        header('Content-Length: ' . filesize($file));
+        readfile($file);
+        exit;
+    }
+    header("HTTP/1.0 404 Not Found");
+    exit;
+}
+
 require_once("common.php");
 
-$pluginSettings = array();
-
-if (isset($_GET['plugin']))
-{
-	$pluginConfigFile = $settings['configDirectory'] . "/plugin." . $_GET['plugin'];
-	if (file_exists($pluginConfigFile))
-		$pluginSettings = parse_ini_file($pluginConfigFile);
-}
-
+$pluginSettings = [];
 ?>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <?php include 'common/menuHead.inc'; ?>
+        <title><?= $pageTitle ?></title>
+        <script type="text/javascript">
+            var pluginSettings = new Array();
+            <?php
+            foreach ($pluginSettings as $key => $value) {
+                echo "pluginSettings[{$key}] = \"{$value}\";" . PHP_EOL;
+            }
+            ?>
+        </script>
+        <?= buildCss($pluginDirectory) ?>
+    </head>
+    <body>
+    <div id="bodyWrapper">
+        <?php include_once 'menu.inc'; ?>
+        <br/>
+        <?php
+        include_once($pluginDirectory . "/" . PLUGIN . "/" . PAGE);
 
-<!DOCTYPE html>
-<html>
-<head>
-<?php include 'common/menuHead.inc'; ?>
-<title><? echo $pageTitle; ?></title>
-<script type="text/javascript">
-	var pluginSettings = new Array();
-<?
-	foreach ($pluginSettings as $key => $value) {
-		printf("	pluginSettings['%s'] = \"%s\";\n", $key, $value);
-	}
-?>
-</script>
+        if (file_exists($pluginDirectory . "/" . PLUGIN . "/plugin.php")) {
+            include_once($pluginDirectory . "/" . PLUGIN . "/plugin.php");
+        }
 
-<?
-
-$jsDir = $pluginDirectory . "/" . $_GET['plugin'] . "/js/";
-if ( file_exists($jsDir))
-{
-	if ($handle = opendir($jsDir))
-	{
-		while (($file = readdir($handle)) !== false)
-		{
-			if (!in_array($file, array('.', '..')) && !is_dir($jsDir . $file))
-			{
-				printf( "<script type='text/javascript' src='plugin.php?plugin=%s&file=js/%s&nopage=1'></script>\n",
-					$_GET['plugin'], $file);
-			}
-		}
-	}
-}
-
-$cssDir = $pluginDirectory . "/" . $_GET['plugin'] . "/css/";
-if ( file_exists($cssDir))
-{
-	if ($handle = opendir($cssDir))
-	{
-		while (($file = readdir($handle)) !== false)
-		{
-			if (!in_array($file, array('.', '..')) && !is_dir($cssDir . $file))
-			{
-				printf( "<link rel='stylesheet' type='text/css' href='/plugin.php?plugin=%s&file=css/%s&nopage=1'>\n",
-					$_GET['plugin'], $file);
-			}
-		}
-	}
-}
-
-?>
-</head>
-<body>
-<div id="bodyWrapper">
-  <?php include 'menu.inc'; ?>
-  <br/>
+        include_once 'common/footer.inc';
+        ?>
+    </div>
+    <?= buildJs($pluginDirectory) ?>
+    </body>
+    </html>
 
 <?php
-else:
-$skipJSsettings = 1;
-require_once("config.php");
-endif;
-
-if ( !isset($_GET['plugin']) )
+function buildJs($pluginDirectory = null): string
 {
-	echo "Please don't access this page directly";
-}
-elseif ( empty($_GET['plugin']) )
-{
-	echo "Plugin variable empty, please don't access this page directly";
-}
-elseif ( isset($_GET['page']) && !empty($_GET['page']) )
-{
-	if ( file_exists($pluginDirectory."/".$_GET['plugin']."/".$_GET['page']) )
-	{
-		-include_once($pluginDirectory."/".$_GET['plugin']."/".$_GET['page']);
-	}
-	else
-	{
-		echo "Error with plugin, requesting a page that doesn't exist";
-	}
-}
-elseif ( isset($_GET['file']) && !empty($_GET['file']) )
-{
-	$file = $pluginDirectory . "/" . $_GET['plugin'] . "/" . $_GET['file'];
-
-	if (file_exists($file))
-	{
-		$filename = basename($file);
-		$file_extension = strtolower(substr(strrchr($filename,"."),1));
-
-		switch( $file_extension ) {
-			case "gif": $ctype="image/gif;"; break;
-			case "png": $ctype="image/png;"; break;
-			case "jpeg":
-			case "jpg": $ctype="image/jpg;"; break;
-			case "js":  $ctype="text/javascript;"; break;
-			case "json":$ctype="application/json;"; break;
-			case "css": $ctype="text/css;"; break;
-			default:    $ctype="text/plain;"; break;
-		}
-
-		header('Content-type: ' . $ctype);
-
-		// Without the clean/flush we send two extra bytes that
-		// cause the image to be corrupt.  This is similar to the
-		// bug we had with an extra 2 bytes in our log zip
-		ob_clean();
-		flush();
-		readfile($file);
-		exit();
-	}
-	else
-	{
-		error_log("Error, could not find file $file");
-		echo "Error with plugin, requesting a file that doesn't exist";
-	}
-}
-elseif ( file_exists($pluginDirectory."/".$_GET['plugin']."/plugin.php") )
-{
-	-include_once($pluginDirectory."/".$_GET['plugin']."/plugin.php");
-}
-else
-{
-	echo "Plugin invalid, no main page exists";
+    $jsDir = $pluginDirectory . "/" . PLUGIN . "/js/";
+    $scripts = '';
+    foreach (glob($jsDir . "/*.js") as $filename) {
+        $scripts .= '<script type="text/javascript" src="plugin.php?plugin=' . PLUGIN . '&file=js/' . $filename . '&nopage=1></script>' . PHP_EOL;
+    }
+    return $scripts;
 }
 
-if ( !isset($_GET['nopage']) ): ?>
-
-<?php	include 'common/footer.inc'; ?>
-</div>
-</body>
-</html>
-<?php endif; ?>
+function buildCss($pluginDirectory = null): string
+{
+    $cssDir = $pluginDirectory . "/" . PLUGIN . "/css/";
+    $styles = '';
+    foreach (glob($cssDir . "/*.css") as $filename) {
+        $styles .= '<link rel="stylesheet" type="text/css" href="/plugin.php?plugin=' . PLUGIN . '&file=css/' . $filename . '&nopage=1>' . PHP_EOL;
+    }
+    return $styles;
+}
